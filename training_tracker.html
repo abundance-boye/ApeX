@@ -1617,6 +1617,20 @@ canvas { width: 100%; border-radius: 8px; display: block; }
   <div style="max-width:420px;margin:0 auto;background:var(--bg2);border-radius:16px;padding:20px;border:1px solid var(--border)" id="muscle-info-content"></div>
 </div>
 
+<!-- STORY MODAL -->
+<div class="modal-overlay" id="story-modal">
+  <div class="modal" style="padding:0;overflow:hidden;background:transparent;border:none;box-shadow:none">
+    <div style="position:relative">
+      <button onclick="closeModal('story-modal')" style="position:absolute;top:10px;right:10px;z-index:10;background:rgba(0,0,0,.6);border:none;border-radius:50%;width:36px;height:36px;color:#fff;font-size:20px;cursor:pointer">×</button>
+      <canvas id="story-canvas" style="width:100%;border-radius:16px;display:block"></canvas>
+    </div>
+    <div style="padding:16px;background:var(--bg2);border-radius:0 0 16px 16px">
+      <div style="font-size:13px;color:var(--text2);margin-bottom:12px;text-align:center">Нажми и удержи картинку чтобы сохранить</div>
+      <button onclick="downloadStory()" class="submit-btn">💾 СОХРАНИТЬ КАРТИНКУ</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
@@ -3150,10 +3164,14 @@ function showDetail(id) {
 
   if(w.notes) body += `<div class="history-notes" style="margin-top:12px">${w.notes}</div>`;
 
-  // Edit + Delete buttons
+  // Edit + Delete + Share buttons
   body += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:20px">
     <button onclick="openEditWorkout(${id})" style="padding:14px;background:var(--bg3);color:var(--text);font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:1px;border:1px solid var(--border);border-radius:10px;cursor:pointer">✏️ ИЗМЕНИТЬ</button>
     <button onclick="deleteWorkout()" style="padding:14px;background:var(--red);color:#fff;font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:1px;border:none;border-radius:10px;cursor:pointer">🗑 УДАЛИТЬ</button>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+    <button onclick="shareWorkoutStory(${id})" style="padding:14px;background:rgba(71,200,255,.1);color:var(--accent3);font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:1px;border:1px solid rgba(71,200,255,.3);border-radius:10px;cursor:pointer">🖼️ СТОРИС</button>
+    ${w.sport==='run'||w.sport==='walk'||w.sport==='bike'?`<button onclick="exportGPX(${id})" style="padding:14px;background:rgba(34,197,94,.1);color:var(--green);font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:1px;border:1px solid rgba(34,197,94,.3);border-radius:10px;cursor:pointer">📍 GPX</button>`:'<div></div>'}
   </div>`;
 
   document.getElementById('detail-body').innerHTML = body;
@@ -4747,6 +4765,214 @@ function renderBlock6() {
   try { renderComparePeriods(); } catch(e) {}
   try { renderRacePredictor(); } catch(e) {}
   try { renderCalories(); } catch(e) {}
+}
+
+// ── BLOCK 7: STORY CARD ───────────────────────────────────────
+function shareWorkoutStory(id) {
+  const w = state.workouts.find(x=>x.id===id);
+  if(!w) return;
+
+  const canvas = document.getElementById('story-canvas');
+  const modal = document.getElementById('story-modal');
+  if(!canvas) return;
+
+  // Story dimensions 9:16
+  const W = 540, H = 960;
+  canvas.width = W;
+  canvas.height = H;
+  canvas.style.maxHeight = '70vh';
+  canvas.style.width = 'auto';
+
+  const ctx = canvas.getContext('2d');
+  const sport = w.sport||'gym';
+  const sDef = SPORTS_LIST.find(s=>s.id===sport)||{icon:'⚡',label:'Тренировка'};
+  const sportForm = sDef.form||'gym';
+
+  // Sport-based gradient
+  const gradColors = {
+    run:   ['#0a0a1f','#001a3a','#003366'],
+    swim:  ['#0a1a1f','#00253a','#004466'],
+    gym:   ['#0a0a0f','#1a0a1a','#2a0a2a'],
+    fight: ['#1a0a0a','#2a0a0a','#400a0a'],
+    other: ['#0a0f0a','#0a1a0a','#0a2a0a'],
+  };
+  const gc = gradColors[sportForm]||gradColors.gym;
+
+  // Background gradient
+  const bgGrad = ctx.createLinearGradient(0,0,W,H);
+  bgGrad.addColorStop(0, gc[0]);
+  bgGrad.addColorStop(0.5, gc[1]);
+  bgGrad.addColorStop(1, gc[2]);
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0,0,W,H);
+
+  // Decorative circles
+  const accentColor = sportForm==='run'?'#47c8ff':sportForm==='swim'?'#a78bfa':sportForm==='fight'?'#ff4757':'#e8ff47';
+  ctx.beginPath(); ctx.arc(W*0.85, H*0.15, 200, 0, Math.PI*2);
+  ctx.fillStyle = accentColor+'18'; ctx.fill();
+  ctx.beginPath(); ctx.arc(W*0.1, H*0.82, 150, 0, Math.PI*2);
+  ctx.fillStyle = accentColor+'12'; ctx.fill();
+  ctx.beginPath(); ctx.arc(W*0.9, H*0.65, 100, 0, Math.PI*2);
+  ctx.fillStyle = accentColor+'0a'; ctx.fill();
+
+  // Top logo
+  ctx.fillStyle = accentColor;
+  ctx.font = 'bold 28px DM Sans, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText('⚡ ДОМИНАЦИЯ', 48, 80);
+
+  // Date
+  ctx.fillStyle = '#ffffff88';
+  ctx.font = '22px DM Sans, sans-serif';
+  ctx.fillText(fastDate(w.date).toUpperCase(), 48, 118);
+
+  // Sport icon big
+  ctx.font = '120px serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(sDef.icon, W/2, 310);
+
+  // Workout type
+  ctx.fillStyle = '#ffffff';
+  ctx.font = `bold 52px Bebas Neue, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.letterSpacing = '3px';
+  ctx.fillText((w.type||'').toUpperCase(), W/2, 390);
+
+  // Main stats - big numbers
+  const stats = [];
+  if(sportForm==='run') {
+    if(w.dist) stats.push({val:parseFloat(w.dist).toFixed(2), unit:'КМ', label:'ДИСТАНЦИЯ'});
+    if(w.paceStr) stats.push({val:w.paceStr, unit:'МИН/КМ', label:'ТЕМП'});
+    if(w.hr) stats.push({val:w.hr, unit:'УД/МИН', label:'ЧСС'});
+    if(w.elev) stats.push({val:w.elev, unit:'М', label:'НАБОР'});
+  } else if(sportForm==='gym') {
+    if(w.duration) stats.push({val:w.duration, unit:'МИН', label:'ВРЕМЯ'});
+    if(w.volume>0) stats.push({val:Math.round(w.volume), unit:'КГ', label:'ОБЪЁМ'});
+    if((w.exercises||[]).length) stats.push({val:w.exercises.length, unit:'УПР', label:'УПРАЖНЕНИЙ'});
+  } else {
+    if(w.duration) stats.push({val:w.duration, unit:'МИН', label:'ВРЕМЯ'});
+    if(w.kcal) stats.push({val:w.kcal, unit:'ККАЛ', label:'КАЛОРИИ'});
+  }
+  if(w.rpe) stats.push({val:w.rpe, unit:'/10', label:'RPE'});
+
+  // Stats grid
+  const statCount = Math.min(stats.length, 4);
+  const statW = (W - 96) / Math.min(statCount, 2);
+  stats.slice(0,4).forEach((s,i)=>{
+    const col = i%2, row = Math.floor(i/2);
+    const x = 48 + col*statW + statW/2;
+    const y = 460 + row*160;
+
+    // Card background
+    ctx.fillStyle = '#ffffff12';
+    ctx.beginPath();
+    ctx.roundRect(48 + col*statW, y-60, statW-12, 130, 14);
+    ctx.fill();
+
+    // Value
+    ctx.fillStyle = accentColor;
+    ctx.font = `bold 58px Bebas Neue, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText(String(s.val), x, y);
+
+    // Unit
+    ctx.fillStyle = accentColor+'cc';
+    ctx.font = `bold 20px DM Sans, sans-serif`;
+    ctx.fillText(s.unit, x, y+28);
+
+    // Label
+    ctx.fillStyle = '#ffffff66';
+    ctx.font = `16px DM Sans, sans-serif`;
+    ctx.fillText(s.label, x, y+52);
+  });
+
+  // Feeling emoji
+  if(w.feeling) {
+    ctx.font = '48px serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(w.feeling, W-48, 118);
+  }
+
+  // Bottom bar
+  ctx.fillStyle = '#ffffff08';
+  ctx.fillRect(0, H-90, W, 90);
+  ctx.fillStyle = '#ffffff55';
+  ctx.font = '18px DM Sans, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('dominacia • тренировочный трекер', W/2, H-32);
+
+  // Accent line top
+  const lineGrad = ctx.createLinearGradient(0,0,W,0);
+  lineGrad.addColorStop(0, accentColor+'00');
+  lineGrad.addColorStop(0.5, accentColor);
+  lineGrad.addColorStop(1, accentColor+'00');
+  ctx.fillStyle = lineGrad;
+  ctx.fillRect(0, 0, W, 3);
+
+  modal.classList.add('open');
+}
+
+function downloadStory() {
+  const canvas = document.getElementById('story-canvas');
+  if(!canvas) return;
+  const link = document.createElement('a');
+  link.download = 'workout-story.png';
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+  showToast('💾 Картинка сохранена!');
+}
+
+// ── BLOCK 7: GPX EXPORT ───────────────────────────────────────
+function exportGPX(id) {
+  const w = state.workouts.find(x=>x.id===id);
+  if(!w) return;
+
+  const date = w.date ? new Date(w.date+'T08:00:00Z') : new Date();
+  const isoDate = date.toISOString();
+  const name = (w.type||'Тренировка') + ' ' + (w.date||'');
+  const dist = parseFloat(w.dist)||0;
+  const secs = parseTimeToSecs(w.time||'');
+  const hr = w.hr||0;
+
+  // Generate simple GPX with 2 trackpoints (start/end)
+  // Real GPS coords not available — use dummy coords as placeholder
+  const lat = 51.5074, lon = 51.1801; // default coords
+  const endLat = lat + (dist * 0.009); // rough offset
+
+  const gpx = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Доминация Трекер"
+  xmlns="http://www.topografix.com/GPX/1/1"
+  xmlns:gpxtpx="http://www.garmin.com/xmlschemas/TrackPointExtension/v1">
+  <metadata>
+    <name>${name}</name>
+    <time>${isoDate}</time>
+  </metadata>
+  <trk>
+    <name>${name}</name>
+    <type>${w.sport==='run'?'running':w.sport==='walk'?'walking':'cycling'}</type>
+    <trkseg>
+      <trkpt lat="${lat.toFixed(6)}" lon="${lon.toFixed(6)}">
+        <ele>${w.elev||0}</ele>
+        <time>${isoDate}</time>
+        ${hr?`<extensions><gpxtpx:TrackPointExtension><gpxtpx:hr>${hr}</gpxtpx:hr></gpxtpx:TrackPointExtension></extensions>`:''}
+      </trkpt>
+      <trkpt lat="${endLat.toFixed(6)}" lon="${lon.toFixed(6)}">
+        <ele>${w.elev||0}</ele>
+        <time>${new Date(date.getTime()+secs*1000).toISOString()}</time>
+        ${hr?`<extensions><gpxtpx:TrackPointExtension><gpxtpx:hr>${hr}</gpxtpx:hr></gpxtpx:TrackPointExtension></extensions>`:''}
+      </trkpt>
+    </trkseg>
+  </trk>
+</gpx>`;
+
+  const blob = new Blob([gpx], {type:'application/gpx+xml'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${(w.date||'workout')}-${(w.type||'run').replace(/\s+/g,'-')}.gpx`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('📍 GPX файл сохранён!');
 }
 
 function renderAchieve() {
