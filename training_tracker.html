@@ -5,10 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Доминация">
+<meta name="apple-mobile-web-app-title" content="ApeX">
 <meta name="theme-color" content="#0a0a0f">
-<link rel="manifest" href="data:application/json,{&quot;name&quot;:&quot;Доминация&quot;,&quot;short_name&quot;:&quot;Доминация&quot;,&quot;start_url&quot;:&quot;.&quot;,&quot;display&quot;:&quot;standalone&quot;,&quot;background_color&quot;:&quot;%230a0a0f&quot;,&quot;theme_color&quot;:&quot;%23e8ff47&quot;,&quot;icons&quot;:[{&quot;src&quot;:&quot;data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230a0a0f'/><text y='.9em' font-size='80' x='10'>⚡</text></svg>&quot;,&quot;sizes&quot;:&quot;any&quot;,&quot;type&quot;:&quot;image/svg+xml&quot;}]}">
-<title>Доминация — Трекер</title>
+<link rel="manifest" href="data:application/json,{&quot;name&quot;:&quot;ApeX&quot;,&quot;short_name&quot;:&quot;ApeX&quot;,&quot;start_url&quot;:&quot;.&quot;,&quot;display&quot;:&quot;standalone&quot;,&quot;background_color&quot;:&quot;%230a0a0f&quot;,&quot;theme_color&quot;:&quot;%23e8ff47&quot;,&quot;icons&quot;:[{&quot;src&quot;:&quot;data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230a0a0f'/><text y='.9em' font-size='80' x='10'>⚡</text></svg>&quot;,&quot;sizes&quot;:&quot;any&quot;,&quot;type&quot;:&quot;image/svg+xml&quot;}]}">
+<title>ApeX — Tracker</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap');
 
@@ -571,7 +571,7 @@ canvas { width: 100%; border-radius: 8px; display: block; }
 <body>
 <div id="app">
   <header>
-    <div class="logo">⚡ ДОМИНАЦИЯ</div>
+    <div class="logo">⚡ ApeX</div>
     <div class="header-right">
       <div class="week-badge" id="week-badge">НЕДЕЛЯ 1</div>
       <button onclick="toggleTheme()" id="theme-btn" title="Тема" style="width:34px;height:34px;border-radius:50%;border:1px solid var(--border);background:var(--bg3);color:var(--text2);font-size:16px;cursor:pointer">🌙</button>
@@ -1835,6 +1835,11 @@ function formatDate(d) {
 
 // ── EXPORT / IMPORT ───────────────────────────────────────────
 function exportData() {
+  const checkins = (() => { try { return JSON.parse(storage.getItem('morning_checkins')||'[]'); } catch(e) { return []; } })();
+  const templates = (() => { try { return JSON.parse(storage.getItem('workout_templates')||'[]'); } catch(e) { return []; } })();
+  const badges = (() => { try { return JSON.parse(storage.getItem('badges')||'{}'); } catch(e) { return {}; } })();
+  const reminder = (() => { try { return JSON.parse(storage.getItem('reminder')||'null'); } catch(e) { return null; } })();
+
   const data = {
     version: STATE_VERSION,
     exportedAt: new Date().toISOString(),
@@ -1843,6 +1848,10 @@ function exportData() {
     phase: state.phase,
     plan: PLAN,
     profile: state.profile,
+    checkins,
+    templates,
+    badges,
+    reminder,
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
@@ -1850,7 +1859,7 @@ function exportData() {
   const d = new Date();
   const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   a.href = url;
-  a.download = `dominacia-backup-${dateStr}.json`;
+  a.download = `apex-backup-${dateStr}.json`;
   a.click();
   URL.revokeObjectURL(url);
   showToast('💾 Данные экспортированы!');
@@ -1869,9 +1878,16 @@ function importData(input) {
       state.phase = data.phase || 1;
       state.profile = data.profile || {};
       if(data.plan) { PLAN[1] = data.plan[1]||[]; PLAN[2] = data.plan[2]||[]; }
+      if(data.checkins?.length) { try { storage.setItem('morning_checkins', JSON.stringify(data.checkins)); } catch(e) {} }
+      if(data.templates?.length) { try { storage.setItem('workout_templates', JSON.stringify(data.templates)); } catch(e) {} }
+      if(data.badges) { try { storage.setItem('badges', JSON.stringify(data.badges)); } catch(e) {} }
+      if(data.reminder) { try { storage.setItem('reminder', JSON.stringify(data.reminder)); } catch(e) {} }
       saveState();
       renderPlan();
-      showToast(`✅ Загружено ${state.workouts.length} тренировок!`);
+      const extras = [];
+      if(data.checkins?.length) extras.push(`${data.checkins.length} чек-инов`);
+      if(data.templates?.length) extras.push(`${data.templates.length} шаблонов`);
+      showToast(`✅ Загружено ${state.workouts.length} тренировок${extras.length?' + '+extras.join(', '):''}!`);
     } catch(err) {
       showToast('⚠️ Ошибка чтения файла');
     }
@@ -3411,7 +3427,7 @@ function scheduleSystemReminder(time) {
     try {
       const tp = getTodayPlan();
       const body = tp ? 'Сегодня: ' + tp.name + '. Время тренироваться!' : '⚡ Время тренироваться!';
-      new Notification('⚡ Доминация', { body, icon:'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="%230a0a0f"/><text y=".9em" font-size="80" x="10">⚡</text></svg>' });
+      new Notification('⚡ ApeX', { body, icon:'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="%230a0a0f"/><text y=".9em" font-size="80" x="10">⚡</text></svg>' });
     } catch(e) {}
     // Reschedule for next day
     const saved = (() => { try { return JSON.parse(storage.getItem('reminder')||'null'); } catch(e) { return null; } })();
@@ -4819,7 +4835,7 @@ function shareWorkoutStory(id) {
   ctx.fillStyle = accentColor;
   ctx.font = 'bold 28px DM Sans, sans-serif';
   ctx.textAlign = 'left';
-  ctx.fillText('⚡ ДОМИНАЦИЯ', 48, 80);
+  ctx.fillText('⚡ ApeX', 48, 80);
 
   // Date
   ctx.fillStyle = '#ffffff88';
@@ -4899,7 +4915,7 @@ function shareWorkoutStory(id) {
   ctx.fillStyle = '#ffffff55';
   ctx.font = '18px DM Sans, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('dominacia • тренировочный трекер', W/2, H-32);
+  ctx.fillText('ApeX • training tracker', W/2, H-32);
 
   // Accent line top
   const lineGrad = ctx.createLinearGradient(0,0,W,0);
@@ -4940,7 +4956,7 @@ function exportGPX(id) {
   const endLat = lat + (dist * 0.009); // rough offset
 
   const gpx = `<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="Доминация Трекер"
+<gpx version="1.1" creator="ApeX Tracker"
   xmlns="http://www.topografix.com/GPX/1/1"
   xmlns:gpxtpx="http://www.garmin.com/xmlschemas/TrackPointExtension/v1">
   <metadata>
