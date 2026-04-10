@@ -84,7 +84,7 @@ header {
 #notify-btn:hover { border-color: var(--accent); color: var(--accent); }
 
 /* ── CONTENT SCROLL AREA ── */
-#content { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 16px 16px 80px; }
+#content { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 16px 16px calc(80px + max(env(safe-area-inset-bottom), 12px)); }
 #content::-webkit-scrollbar { width: 3px; }
 #content::-webkit-scrollbar-track { background: transparent; }
 #content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
@@ -94,14 +94,16 @@ nav {
   position: fixed; bottom: 0; left: 0; right: 0;
   background: var(--bg2); border-top: 1px solid var(--border);
   display: flex; z-index: 100;
-  padding-bottom: env(safe-area-inset-bottom);
+  padding-bottom: max(env(safe-area-inset-bottom), 12px);
+  padding-top: 4px;
 }
 .tab {
   flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  padding: 8px 2px 6px; gap: 3px; cursor: pointer;
+  padding: 8px 2px 4px; gap: 3px; cursor: pointer;
   color: var(--text2); font-size: 9px; font-weight: 500; letter-spacing: .3px;
   transition: all .2s; border: none; background: none;
   -webkit-appearance: none;
+  min-height: 52px;
 }
 .tab .icon { font-size: 20px; line-height: 1; }
 .tab.active { color: var(--accent); }
@@ -695,6 +697,33 @@ canvas { width: 100%; border-radius: 8px; display: block; }
 
       <!-- ═══ RUN FORM ═══ -->
       <div class="sport-form" id="form-run">
+
+        <!-- GARMIN SCREENSHOT IMPORT -->
+        <div class="card" style="border-color:rgba(71,200,255,.3);background:rgba(71,200,255,.04)">
+          <div class="card-title" style="color:var(--accent3);margin-bottom:8px">📸 ИМПОРТ ИЗ GARMIN</div>
+          <div style="font-size:13px;color:var(--text2);margin-bottom:12px">Прикрепи 1-2 скрина из Garmin Connect — данные заполнятся автоматически</div>
+          <label id="garmin-img-label" style="display:flex;align-items:center;gap:10px;padding:12px;background:var(--bg3);border:2px dashed rgba(71,200,255,.4);border-radius:10px;cursor:pointer;margin-bottom:8px">
+            <span style="font-size:24px">📸</span>
+            <div>
+              <div style="font-size:14px;font-weight:600;color:var(--accent3)">Выбрать скриншоты</div>
+              <div style="font-size:11px;color:var(--text2)">Можно выбрать несколько сразу</div>
+            </div>
+            <input type="file" id="garmin-img-input" accept="image/*" multiple style="display:none" onchange="importGarminImage(this)">
+          </label>
+          <div id="garmin-img-previews" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"></div>
+          <div id="garmin-img-status" style="display:none;padding:10px;border-radius:8px;font-size:13px"></div>
+
+          <!-- Manual paste area for JSON from Claude -->
+          <details style="margin-top:8px">
+            <summary style="font-size:12px;color:var(--text2);cursor:pointer;padding:6px 0">📋 Вставить данные вручную (из Claude)</summary>
+            <div style="margin-top:8px">
+              <div style="font-size:12px;color:var(--text2);margin-bottom:6px">Отправь скрин в Claude, попроси извлечь данные пробежки в JSON, вставь ответ сюда:</div>
+              <textarea id="garmin-json-paste" class="form-textarea" placeholder='{"dist":4.04,"time":"00:34:21","hr":136,"hrMax":152,"cadence":156,"elev":77,"kcal":302}' style="height:80px;font-size:11px;font-family:monospace"></textarea>
+              <button onclick="applyGarminJSON()" style="width:100%;margin-top:6px;padding:10px;background:rgba(71,200,255,.15);border:1px solid rgba(71,200,255,.4);border-radius:8px;color:var(--accent3);font-size:13px;font-weight:600;cursor:pointer">✅ Применить</button>
+            </div>
+          </details>
+        </div>
+
         <div class="card">
           <div class="card-title" style="color:var(--accent3)">🏃 ТИП ПРОБЕЖКИ</div>
           <div class="form-section">
@@ -1035,6 +1064,34 @@ canvas { width: 100%; border-radius: 8px; display: block; }
     <div class="page" id="page-progress">
       <div class="stats-row" id="progress-stats"></div>
 
+      <!-- COMPARE PERIODS -->
+      <div class="card">
+        <div class="card-title">📅 СРАВНЕНИЕ ПЕРИОДОВ</div>
+        <div style="display:flex;gap:6px;margin-bottom:12px">
+          <button onclick="setCompare('week',this)" class="filter-tab active" id="cmp-week">Недели</button>
+          <button onclick="setCompare('month',this)" class="filter-tab" id="cmp-month">Месяцы</button>
+        </div>
+        <div id="compare-content"><div style="color:var(--text2);font-size:13px">Нет данных</div></div>
+      </div>
+
+      <!-- RACE PREDICTOR -->
+      <div class="card">
+        <div class="card-title">🏁 ПРОГНОЗ ВРЕМЕНИ</div>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:10px">На основе твоих лучших пробежек по формуле Риджела</div>
+        <div id="race-predictor-content"><div style="color:var(--text2);font-size:13px">Нужны пробежки с дистанцией и временем</div></div>
+      </div>
+
+      <!-- CALORIES -->
+      <div class="card">
+        <div class="card-title">🔥 КАЛОРИИ</div>
+        <div style="display:flex;gap:6px;margin-bottom:12px">
+          <button onclick="setCalPeriod('week',this)" class="filter-tab active" id="cal-week">Неделя</button>
+          <button onclick="setCalPeriod('month',this)" class="filter-tab" id="cal-month">Месяц</button>
+          <button onclick="setCalPeriod('all',this)" class="filter-tab" id="cal-all">Всё время</button>
+        </div>
+        <div id="calories-content"><div style="color:var(--text2);font-size:13px">Нет данных</div></div>
+      </div>
+
       <!-- 1RM CALCULATOR -->
       <div class="card">
         <div class="card-title">🏆 МАКСИМУМ (1RM)</div>
@@ -1069,12 +1126,14 @@ canvas { width: 100%; border-radius: 8px; display: block; }
       </div>
       <div class="card">
         <div class="card-title">📊 ОБЪЁМ В НЕДЕЛЮ</div>
+        <div style="font-size:11px;color:var(--text2);margin-bottom:8px">кг × повторения. 1т = 1000 кг суммарно поднято за неделю</div>
         <div class="chart-wrap">
           <canvas id="volume-chart" height="160"></canvas>
         </div>
       </div>
       <div class="card">
         <div class="card-title">😤 RPE ИСТОРИЯ</div>
+        <div style="font-size:11px;color:var(--text2);margin-bottom:8px">1 = очень легко, 6 = комфортно, 8 = тяжело, 10 = максимум</div>
         <div class="chart-wrap">
           <canvas id="rpe-chart" height="140"></canvas>
         </div>
@@ -1225,6 +1284,7 @@ canvas { width: 100%; border-radius: 8px; display: block; }
       <!-- CHART -->
       <div class="card">
         <div class="card-title">📅 НАГРУЗКА ПО ДНЯМ</div>
+        <div style="font-size:11px;color:var(--text2);margin-bottom:8px">Нагрузка = минуты × RPE. Лёгкая 45 мин RPE 5 = 225 единиц</div>
         <div class="chart-wrap"><canvas id="load-chart" height="160"></canvas></div>
       </div>
 
@@ -1550,6 +1610,11 @@ canvas { width: 100%; border-radius: 8px; display: block; }
   <div id="reminder-overlay-plan" style="font-size:16px;color:var(--text2);margin-bottom:32px"></div>
   <button onclick="dismissReminder(false)" style="width:100%;max-width:280px;padding:16px;background:var(--accent);color:#0a0a0f;font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:2px;border:none;border-radius:12px;cursor:pointer;margin-bottom:10px">⚡ НАЧАТЬ ТРЕНИРОВКУ</button>
   <button onclick="dismissReminder(true)" style="width:100%;max-width:280px;padding:12px;background:none;border:1px solid var(--border);border-radius:12px;color:var(--text2);font-size:15px;cursor:pointer">Пропустить сегодня</button>
+</div>
+
+<!-- MUSCLE INFO OVERLAY -->
+<div id="muscle-info-overlay" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);overflow-y:auto;padding:20px">
+  <div style="max-width:420px;margin:0 auto;background:var(--bg2);border-radius:16px;padding:20px;border:1px solid var(--border)" id="muscle-info-content"></div>
 </div>
 
 <div id="toast"></div>
@@ -2445,6 +2510,9 @@ function renderProgress() {
     <div class="stat-card"><div class="stat-val green">${totalVol>0?Math.round(totalVol/1000)+'т':'—'}</div><div class="stat-label">Общий объём</div></div>
     <div class="stat-card"><div class="stat-val orange">${avgRPE}</div><div class="stat-label">Средний RPE</div></div>`;
 
+  // Block 6
+  try { renderBlock6(); } catch(e) {}
+
   // Block 2
   try { render1RM(); } catch(e) {}
   try { renderMuscleBalance(); } catch(e) {}
@@ -2512,7 +2580,7 @@ function drawVolumeChart() {
     });
     const points = Object.entries(weeks).sort((a,b)=>a[0].localeCompare(b[0])).map(([d,v])=>({date:d,val:Math.round(v)}));
     if(points.length<1) { drawEmpty(ctx,W,H,'Мало данных'); return; }
-    drawBarChart(ctx,W,H,points,'Объём кг/нед','#47c8ff');
+    drawBarChart(ctx,W,H,points,'кг × повт (т = 1000 кг)','#47c8ff');
   } catch(e) { console.log('volume chart err',e); }
 }
 
@@ -2535,7 +2603,7 @@ function drawRPEChart() {
 }
 
 function drawLineChart(ctx,W,H,points,label,color,minY,maxY) {
-  const pad = { t:20, r:16, b:36, l:40 };
+  const pad = { t:24, r:16, b:36, l:44 };
   const cW = W-pad.l-pad.r, cH = H-pad.t-pad.b;
 
   // Filter out invalid points
@@ -2545,7 +2613,13 @@ function drawLineChart(ctx,W,H,points,label,color,minY,maxY) {
   const vals = validPoints.map(p=>p.val);
   let lo = minY!==undefined ? minY : Math.min(...vals)*0.95;
   let hi = maxY!==undefined ? maxY : Math.max(...vals)*1.05;
-  if(hi === lo) { hi = lo + 1; } // avoid division by zero
+  if(hi === lo) { hi = lo + 1; }
+
+  // Unit label top-left
+  if(label) {
+    ctx.fillStyle='#8888aa'; ctx.font='10px DM Sans'; ctx.textAlign='left';
+    ctx.fillText(label, 4, 14);
+  }
 
   // Grid
   ctx.strokeStyle='#2a2a3e'; ctx.lineWidth=1;
@@ -2554,7 +2628,7 @@ function drawLineChart(ctx,W,H,points,label,color,minY,maxY) {
     ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(pad.l+cW,y); ctx.stroke();
     const v = lo+(hi-lo)*i/4;
     ctx.fillStyle='#8888aa'; ctx.font='10px DM Sans';
-    ctx.textAlign='right'; ctx.fillText(Math.round(v),pad.l-6,y+4);
+    ctx.textAlign='right'; ctx.fillText(Math.round(v),pad.l-4,y+4);
   }
 
   const xStep = cW / Math.max(validPoints.length - 1, 1);
@@ -2602,32 +2676,48 @@ function drawLineChart(ctx,W,H,points,label,color,minY,maxY) {
 
 function drawBarChart(ctx,W,H,points,label,color) {
   if(!points || !points.length || W < 10) { drawEmpty(ctx,W,H,'Нет данных'); return; }
-  const pad={t:20,r:16,b:36,l:40};
+  const pad={t:24,r:16,b:36,l:48};
   const cW=Math.max(W-pad.l-pad.r, 1), cH=Math.max(H-pad.t-pad.b, 1);
   const vals=points.map(p=>p.val||0);
   const hi=Math.max(...vals)*1.1||1;
+
+  // Units label top-left
+  if(label) {
+    ctx.fillStyle='#8888aa'; ctx.font='10px DM Sans'; ctx.textAlign='left';
+    ctx.fillText(label, pad.l, 14);
+  }
 
   ctx.strokeStyle='#2a2a3e'; ctx.lineWidth=1;
   for(let i=0;i<=4;i++){
     const y=pad.t+cH*(1-i/4);
     ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(pad.l+cW,y); ctx.stroke();
     ctx.fillStyle='#8888aa'; ctx.font='10px DM Sans'; ctx.textAlign='right';
-    ctx.fillText(Math.round(hi*i/4),pad.l-6,y+4);
+    // Smart number formatting
+    const val = hi*i/4;
+    const txt = val >= 1000 ? (val/1000).toFixed(1)+'т' : Math.round(val).toString();
+    ctx.fillText(txt, pad.l-4, y+4);
   }
 
   const bW=cW/points.length*0.7, gap=cW/points.length;
   points.forEach((p,i)=>{
-    const x=pad.l+i*gap+gap*0.15, bH=p.val/hi*cH;
-    const grd=ctx.createLinearGradient(0,pad.t+cH-bH,0,pad.t+cH);
-    grd.addColorStop(0,color); grd.addColorStop(1,color+'44');
-    ctx.fillStyle=grd;
-    ctx.beginPath();
-    ctx.fillRect(x, pad.t+cH-bH, bW, bH);
-    if(points.length<=8){
-      const dt=new Date(p.date+'T00:00:00');
-      const lbl=dt.toLocaleDateString('ru-RU',{day:'numeric',month:'short'});
+    const x=pad.l+i*gap+gap*0.15, bH=Math.max(p.val/hi*cH, 0);
+    if(bH > 0) {
+      const grd=ctx.createLinearGradient(0,pad.t+cH-bH,0,pad.t+cH);
+      grd.addColorStop(0,color); grd.addColorStop(1,color+'44');
+      ctx.fillStyle=grd;
+      ctx.fillRect(x, pad.t+cH-bH, bW, bH);
+    }
+    // X labels
+    if(points.length<=12){
       ctx.fillStyle='#8888aa'; ctx.textAlign='center'; ctx.font='9px DM Sans';
-      ctx.fillText(lbl,x+bW/2,H-6);
+      // Use fastDate-style formatting if date string, else use label directly
+      let lbl = p.date||'';
+      if(lbl.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        const parts = lbl.split('-');
+        const months=['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
+        lbl = parseInt(parts[2])+' '+months[parseInt(parts[1])-1];
+      }
+      ctx.fillText(lbl, x+bW/2, H-4);
     }
   });
 }
@@ -2911,7 +3001,7 @@ function renderLoad() {
         ctx.clearRect(0,0,W,H);
         const pts = [];
         for(let i=29;i>=0;i--) { const ds=daysAgo(i); pts.push({date:ds,val:loadByDate[ds]||0}); }
-        drawBarChart(ctx,W,H,pts,'Нагрузка','#a78bfa');
+        drawBarChart(ctx,W,H,pts,'мин × RPE (нагрузка)','#a78bfa');
       }
     } catch(e) {}
 
@@ -3692,12 +3782,143 @@ const MUSCLE_COLORS = {
   'Бицепс':'#eab308','Трицепс':'#06b6d4','Пресс':'#8888aa',
 };
 
+// Muscle group encyclopedia
+const MUSCLE_INFO = {
+  'Грудь': {
+    img: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/54/Pectoralis_major.png/240px-Pectoralis_major.png',
+    emoji: '💪',
+    location: 'Передняя часть грудной клетки',
+    desc: 'Большая грудная мышца (pectoralis major) — самая крупная мышца груди. Отвечает за сведение рук перед собой, горизонтальное жимовое движение. Делится на верхнюю (ключичную) и нижнюю (грудинную) части.',
+    role: 'Жимовые движения, толчок от груди, броски',
+    pair: 'Спина — всегда тренируй вместе для баланса осанки',
+  },
+  'Спина': {
+    img: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b9/Latissimus_dorsi.png/240px-Latissimus_dorsi.png',
+    emoji: '🔙',
+    location: 'Задняя поверхность туловища',
+    desc: 'Широчайшая мышца спины (latissimus dorsi) — самая большая мышца спины, формирует V-образный силуэт. Также: трапеции (верх спины), ромбовидные (между лопатками), разгибатели позвоночника.',
+    role: 'Тяговые движения, осанка, стабилизация позвоночника',
+    pair: 'Грудь — соотношение должно быть минимум 1:1',
+  },
+  'Квадрицепс': {
+    img: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a3/Quadriceps_femoris.png/240px-Quadriceps_femoris.png',
+    emoji: '🦵',
+    location: 'Передняя поверхность бедра',
+    desc: 'Четырёхглавая мышца бедра (quadriceps femoris) — самая мощная мышца тела. Состоит из 4 головок: прямая, медиальная, латеральная и промежуточная. Разгибает колено и сгибает бедро.',
+    role: 'Приседания, ходьба, бег, прыжки, подъём по лестнице',
+    pair: 'Бицепс бедра должен быть ≥70% от квадрицепса — защита коленей!',
+  },
+  'Бицепс бедра': {
+    img: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/37/Biceps_femoris_long_head.png/240px-Biceps_femoris_long_head.png',
+    emoji: '🦵',
+    location: 'Задняя поверхность бедра',
+    desc: 'Двуглавая мышца бедра (biceps femoris) + полусухожильная и полуперепончатая = задняя группа бедра (hamstrings). Сгибает колено и разгибает бедро. Часто слабее квадрицепса.',
+    role: 'Бег (тяга ноги назад), прыжки, становая тяга, наклоны вперёд',
+    pair: 'Квадрицепс — дисбаланс это главная причина разрыва ПКС у бегунов',
+  },
+  'Плечи': {
+    img: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e5/Deltoid_muscle_animation.gif/240px-Deltoid_muscle_animation.gif',
+    emoji: '🏋️',
+    location: 'Плечевой сустав, верх руки',
+    desc: 'Дельтовидная мышца (deltoid) покрывает плечевой сустав, состоит из 3 пучков: передний, средний и задний. Каждый пучок требует отдельной проработки.',
+    role: 'Подъём рук в стороны/вперёд/назад, жим над головой',
+    pair: 'Задний пучок часто слабее передних — добавь обратные разводки',
+  },
+  'Ягодицы': {
+    img: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b5/Gluteus_maximus.png/240px-Gluteus_maximus.png',
+    emoji: '🍑',
+    location: 'Задняя поверхность таза',
+    desc: 'Большая ягодичная мышца (gluteus maximus) — одна из самых мощных мышц тела. Разгибает бедро, участвует в приседании, беге и прыжках.',
+    role: 'Бег, приседания, подъём по лестнице, стабилизация таза',
+    pair: 'Слабые ягодицы = боли в пояснице и коленях. Ключ к здоровью бегуна',
+  },
+  'Бицепс': {
+    img: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5d/Bicep_brachii.png/240px-Bicep_brachii.png',
+    emoji: '💪',
+    location: 'Передняя поверхность плеча',
+    desc: 'Двуглавая мышца плеча (biceps brachii) — сгибает локоть и разворачивает ладонь вверх. Длинная и короткая головки. Составляет 1/3 массы плеча.',
+    role: 'Сгибание локтя, подтягивания, тяговые движения',
+    pair: 'Трицепс составляет 2/3 плеча — не забывай о нём!',
+  },
+  'Трицепс': {
+    img: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/81/Triceps_brachii.png/240px-Triceps_brachii.png',
+    emoji: '💪',
+    location: 'Задняя поверхность плеча',
+    desc: 'Трёхглавая мышца плеча (triceps brachii) — разгибает локоть. Три головки: длинная, медиальная, латеральная. Составляет около 60-70% объёма плеча.',
+    role: 'Жимовые движения, разгибание локтя, толчок',
+    pair: 'Бицепс — тренируй оба для здоровья локтевого сустава',
+  },
+  'Пресс': {
+    img: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/59/Rectus_abdominis.png/240px-Rectus_abdominis.png',
+    emoji: '🎯',
+    location: 'Передняя стенка живота',
+    desc: 'Прямая мышца живота (rectus abdominis) — "кубики". Косые мышцы — стабилизация и вращение. Поперечная — глубокий "корсет", самая важная для здоровья спины.',
+    role: 'Стабилизация позвоночника, скручивание, защита внутренних органов',
+    pair: 'Слабый пресс = боли в пояснице. Тренируй все 3 слоя',
+  },
+};
+
 // Key imbalance pairs to warn about
 const BALANCE_PAIRS = [
   {a:'Грудь',  b:'Спина',        ideal:0.8, warn:'Спина должна работать минимум столько же сколько грудь. Слабая спина = плохая осанка и боли в плечах.'},
   {a:'Квадрицепс', b:'Бицепс бедра', ideal:0.7, warn:'Бицепс бедра должен быть ≥70% от квадрицепса. Дисбаланс — главная причина травм колен и подколенных сухожилий.'},
   {a:'Бицепс', b:'Трицепс',      ideal:0.7, warn:'Трицепс составляет 2/3 массы руки. Равномерная нагрузка важна для здоровья локтей.'},
 ];
+
+function showMuscleInfo(group) {
+  try {
+    const info = MUSCLE_INFO[group];
+    if(!info) return;
+    const exercises = MUSCLE_GROUPS[group]||[];
+    const color = MUSCLE_COLORS[group]||'#8888aa';
+
+    const overlay = document.getElementById('muscle-info-overlay');
+    const content = document.getElementById('muscle-info-content');
+    if(!overlay||!content) return;
+
+  content.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+      <div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:24px;color:${color};letter-spacing:1px">${group.toUpperCase()}</div>
+        <div style="font-size:12px;color:var(--text2)">${info.location}</div>
+      </div>
+      <button onclick="closeMuscleInfo()" style="background:var(--bg3);border:1px solid var(--border);border-radius:50%;width:32px;height:32px;color:var(--text2);font-size:18px;cursor:pointer;flex-shrink:0">×</button>
+    </div>
+
+    <div style="display:flex;justify-content:center;margin-bottom:14px;padding:12px;background:var(--bg3);border-radius:12px;min-height:140px;align-items:center;overflow:hidden">
+      ${info.img
+        ? `<img src="${info.img}" alt="${group}" style="max-height:200px;max-width:100%;object-fit:contain;border-radius:8px" onerror="this.parentNode.innerHTML='<div style=\\'font-size:64px\\'>${info.emoji}</div>'">`
+        : `<div style="font-size:64px">${info.emoji}</div>`}
+    </div>
+
+    <div style="font-size:13px;color:var(--text);line-height:1.6;margin-bottom:12px">${info.desc}</div>
+
+    <div style="background:rgba(0,0,0,0.15);border:1px solid ${color}44;border-radius:8px;padding:10px;margin-bottom:12px">
+      <div style="font-size:11px;font-weight:600;color:${color};margin-bottom:3px">РОЛЬ В СПОРТЕ</div>
+      <div style="font-size:12px;color:var(--text2)">${info.role}</div>
+    </div>
+
+    <div style="background:rgba(249,115,22,0.08);border:1px solid rgba(249,115,22,0.3);border-radius:8px;padding:10px;margin-bottom:14px">
+      <div style="font-size:11px;font-weight:600;color:var(--orange);margin-bottom:3px">⚖️ БАЛАНС</div>
+      <div style="font-size:12px;color:var(--text2)">${info.pair}</div>
+    </div>
+
+    <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px;letter-spacing:1px">УПРАЖНЕНИЯ</div>
+    <div style="display:flex;flex-direction:column;gap:5px">
+      ${exercises.map(ex=>`
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg3);border-radius:8px;font-size:13px;color:var(--text)">
+          <span style="color:${color}">▸</span> ${ex}
+        </div>`).join('')}
+    </div>`;
+
+    overlay.style.display = 'flex';
+  } catch(e) { console.log('muscle info err:', e.message); }
+}
+
+function closeMuscleInfo() {
+  const overlay = document.getElementById('muscle-info-overlay');
+  if(overlay) overlay.style.display = 'none';
+}
 
 function renderMuscleBalance() {
   const el = document.getElementById('muscle-balance-content');
@@ -3734,19 +3955,22 @@ function renderMuscleBalance() {
 
   const maxSets = Math.max(...entries.map(([,v])=>v));
 
-  let html = `<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">`;
+  let html = `<div style="font-size:11px;color:var(--text2);margin-bottom:8px">Нажми на группу мышц чтобы узнать больше 👇</div>
+  <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">`;
   entries.forEach(([group, sets])=>{
     const pct = Math.round(sets/maxSets*100);
     const color = MUSCLE_COLORS[group]||'#8888aa';
-    html += `<div>
-      <div style="display:flex;justify-content:space-between;margin-bottom:3px">
-        <span style="font-size:13px;color:var(--text)">${group}</span>
-        <span style="font-size:12px;color:var(--text2)">${sets} подх.</span>
-      </div>
-      <div style="background:var(--bg3);border-radius:4px;height:8px;overflow:hidden">
-        <div style="height:100%;border-radius:4px;background:${color};width:${pct}%;transition:width .5s ease"></div>
-      </div>
-    </div>`;
+    const hasInfo = !!MUSCLE_INFO[group];
+    const onclick = hasInfo ? `showMuscleInfo('${group}')` : 'void(0)';
+    html += '<div onclick="'+onclick+'" style="cursor:'+(hasInfo?'pointer':'default')+';padding:6px 8px;border-radius:8px;background:var(--bg3);border:1px solid var(--border);margin-bottom:4px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">' +
+        '<span style="font-size:13px;color:var(--text);font-weight:500">'+group+(hasInfo?' <span style="font-size:10px;color:'+color+'">ℹ️</span>':'')+'</span>' +
+        '<span style="font-size:12px;color:var(--text2)">'+sets+' подх.</span>' +
+      '</div>' +
+      '<div style="background:var(--bg2);border-radius:4px;height:8px;overflow:hidden">' +
+        '<div style="height:100%;border-radius:4px;background:'+color+';width:'+pct+'%;transition:width .5s ease"></div>' +
+      '</div>' +
+    '</div>';
   });
   html += `</div>`;
 
@@ -4036,14 +4260,14 @@ function renderCheckinChart() {
     ctx.clearRect(0,0,W,H);
 
     const datasets = [
-      {key:'sleep',  color:'#22c55e'},
-      {key:'feel',   color:'#a78bfa'},
-      {key:'ready',  color:'#f97316'},
+      {key:'sleep',  color:'#22c55e', label:'Сон (1-10)'},
+      {key:'feel',   color:'#a78bfa', label:'Самочувствие (1-10)'},
+      {key:'ready',  color:'#f97316', label:'Готовность (1-10)'},
     ];
 
     datasets.forEach(ds=>{
       const pts = checkins.map(c=>({date:c.date, val:c[ds.key]||0}));
-      drawLineChart(ctx, W, H, pts, ds.key, ds.color, 1, 10);
+      drawLineChart(ctx, W, H, pts, ds.label, ds.color, 1, 10);
     });
   } catch(e) {}
 }
@@ -4235,6 +4459,296 @@ function renderTotalStats() {
   ${streak>=3?`<div style="margin-top:10px;padding:10px;background:rgba(232,255,71,.08);border:1px solid rgba(232,255,71,.3);border-radius:8px;font-size:13px;color:var(--accent)">🔥 Серия ${streak} дней подряд!</div>`:''}`;
 }
 
+// ── BLOCK 6: COMPARE PERIODS ──────────────────────────────────
+let compareMode = 'week';
+let calPeriod = 'week';
+
+function setCompare(mode, btn) {
+  compareMode = mode;
+  document.querySelectorAll('#cmp-week,#cmp-month').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  renderComparePeriods();
+}
+
+function setCalPeriod(period, btn) {
+  calPeriod = period;
+  document.querySelectorAll('#cal-week,#cal-month,#cal-all').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  renderCalories();
+}
+
+function renderComparePeriods() {
+  const el = document.getElementById('compare-content');
+  if(!el) return;
+  const ws = state.workouts||[];
+  if(ws.length < 2) { el.innerHTML='<div style="color:var(--text2);font-size:13px">Нужно минимум 2 тренировки</div>'; return; }
+
+  let periods = [];
+
+  if(compareMode === 'week') {
+    function mondayOf(n) {
+      const d=new Date(); d.setHours(0,0,0,0);
+      const dow=d.getDay()||7; d.setDate(d.getDate()-dow+1-n*7);
+      return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    }
+    const labels = ['Эта','Пред.','2 нед.','3 нед.'];
+    for(let i=0;i<4;i++) {
+      const start=mondayOf(i), end=mondayOf(i-1);
+      const wws = ws.filter(w=>w.date>=start&&w.date<end);
+      periods.push({
+        label: labels[i],
+        count: wws.length,
+        load: wws.reduce((s,w)=>s+(w.load||0),0),
+        km: wws.filter(w=>w.sport==='run').reduce((s,w)=>s+(parseFloat(w.dist)||0),0),
+        vol: Math.round(wws.reduce((s,w)=>s+(w.volume||0),0)),
+        mins: wws.reduce((s,w)=>s+(parseInt(w.duration)||0),0),
+      });
+    }
+  } else {
+    const months = ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
+    for(let i=0;i<4;i++) {
+      const d=new Date(); d.setDate(1); d.setMonth(d.getMonth()-i);
+      const ym=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+      const wws = ws.filter(w=>(w.date||'').startsWith(ym));
+      periods.push({
+        label: months[d.getMonth()],
+        count: wws.length,
+        load: wws.reduce((s,w)=>s+(w.load||0),0),
+        km: wws.filter(w=>w.sport==='run').reduce((s,w)=>s+(parseFloat(w.dist)||0),0),
+        vol: Math.round(wws.reduce((s,w)=>s+(w.volume||0),0)),
+        mins: wws.reduce((s,w)=>s+(parseInt(w.duration)||0),0),
+      });
+    }
+    periods.reverse();
+  }
+
+  const metrics = [
+    {key:'count', label:'Тренировок', color:'var(--accent)'},
+    {key:'mins',  label:'Минут',      color:'var(--accent3)', fmt:v=>Math.round(v)},
+    {key:'km',    label:'Км бега',    color:'#22c55e',        fmt:v=>v.toFixed(1)},
+    {key:'load',  label:'Нагрузка',   color:'var(--accent4)'},
+  ];
+
+  const maxLoad = Math.max(...periods.map(p=>p.load))||1;
+  const curr = periods[compareMode==='week'?0:3];
+  const prev = periods[compareMode==='week'?1:2];
+
+  // Period bars
+  let html = `<div style="display:grid;grid-template-columns:repeat(${periods.length},1fr);gap:6px;margin-bottom:16px">`;
+  periods.forEach((p,i)=>{
+    const isActive = compareMode==='week' ? i===0 : i===periods.length-1;
+    const barH = maxLoad>0 ? Math.round((p.load/maxLoad)*60) : 0;
+    html += `<div style="text-align:center">
+      <div style="height:64px;display:flex;align-items:flex-end;justify-content:center;margin-bottom:4px">
+        <div style="width:28px;height:${barH}px;background:${isActive?'var(--accent)':'var(--bg3)'};border-radius:4px 4px 0 0;border:1px solid ${isActive?'var(--accent)':'var(--border)'}"></div>
+      </div>
+      <div style="font-size:11px;font-weight:600;color:${isActive?'var(--accent)':'var(--text2)'}">${p.label}</div>
+      <div style="font-size:10px;color:var(--text2)">${p.count} трен.</div>
+    </div>`;
+  });
+  html += `</div>`;
+
+  // This vs prev comparison
+  const delta = (curr, prev, key, fmt) => {
+    const c = curr[key]||0, p = prev[key]||0;
+    if(!p) return '';
+    const diff = c-p, pct = Math.round(diff/p*100);
+    const col = diff>=0?'var(--green)':'var(--red)';
+    const sign = diff>=0?'+':'';
+    return `<span style="color:${col};font-size:11px;margin-left:4px">${sign}${pct}%</span>`;
+  };
+
+  html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">`;
+  metrics.forEach(m=>{
+    const val = curr[m.key]||0;
+    const fmt = m.fmt || (v=>v);
+    html += `<div style="background:var(--bg3);border-radius:8px;padding:10px">
+      <div style="font-size:18px;font-weight:700;color:${m.color}">${fmt(val)}${delta(curr,prev,m.key,m.fmt)}</div>
+      <div style="font-size:11px;color:var(--text2)">${m.label}</div>
+    </div>`;
+  });
+  html += `</div>`;
+
+  el.innerHTML = html;
+}
+
+// ── BLOCK 6: RACE PREDICTOR ───────────────────────────────────
+function rigelPredict(distKm, timeSecs, targetKm) {
+  // Riegel formula: T2 = T1 × (D2/D1)^1.06
+  return timeSecs * Math.pow(targetKm/distKm, 1.06);
+}
+
+function secsToHMS(s) {
+  s = Math.round(s);
+  const h=Math.floor(s/3600), m=Math.floor((s%3600)/60), sec=s%60;
+  if(h>0) return h+'ч '+m+'м '+sec+'с';
+  return m+'мин '+sec+'с';
+}
+
+function renderRacePredictor() {
+  const el = document.getElementById('race-predictor-content');
+  if(!el) return;
+  const runs = (state.workouts||[]).filter(w=>w.sport==='run'&&parseFloat(w.dist)>=1&&w.time);
+
+  if(!runs.length) {
+    el.innerHTML='<div style="color:var(--text2);font-size:13px">Нужны пробежки с дистанцией и временем</div>';
+    return;
+  }
+
+  // Find best effort per distance bracket for prediction base
+  // Use best pace run as base
+  const withSecs = runs.map(w=>{
+    const secs = parseTimeToSecs(w.time);
+    const dist = parseFloat(w.dist)||0;
+    return {dist, secs, pace: dist>0&&secs>0?secs/dist:9999};
+  }).filter(w=>w.secs>0&&w.dist>0);
+
+  if(!withSecs.length) { el.innerHTML='<div style="color:var(--text2);font-size:13px">Добавь время в пробежки</div>'; return; }
+
+  // Best effort = lowest pace
+  const best = withSecs.reduce((a,b)=>a.pace<b.pace?a:b);
+
+  const races = [
+    {name:'1 км',  dist:1},
+    {name:'3 км',  dist:3},
+    {name:'5 км',  dist:5},
+    {name:'10 км', dist:10},
+    {name:'21 км', dist:21.097},
+    {name:'42 км', dist:42.195},
+  ];
+
+  const profile = state.profile||{};
+  const hrMax = profile.hrmax||185;
+  const hrRest = profile.hrrest||60;
+
+  let html = `<div style="font-size:12px;color:var(--text2);margin-bottom:10px">
+    База: ${best.dist} км за ${secsToHMS(best.secs)} (темп ${secsToMMSS(best.pace)}/км)
+  </div>
+  <div style="display:flex;flex-direction:column;gap:6px">`;
+
+  races.forEach(r=>{
+    const predSecs = rigelPredict(best.dist, best.secs, r.dist);
+    const predPace = predSecs/r.dist;
+    const isBase = Math.abs(r.dist-best.dist)<0.5;
+
+    // Check if we have an actual result for this distance
+    const actual = withSecs.filter(w=>Math.abs(w.dist-r.dist)<r.dist*0.1);
+    const bestActual = actual.length ? actual.reduce((a,b)=>a.secs<b.secs?a:b) : null;
+
+    html += `<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:${isBase?'rgba(232,255,71,.06)':'var(--bg3)'};border-radius:8px;border:1px solid ${isBase?'var(--accent)':'var(--border)'}">
+      <div style="min-width:44px;font-size:13px;font-weight:600;color:${isBase?'var(--accent)':'var(--text)'}">${r.name}</div>
+      <div style="flex:1">
+        <div style="font-size:14px;font-weight:700;color:var(--text)">${secsToHMS(predSecs)}</div>
+        <div style="font-size:11px;color:var(--text2)">темп ${secsToMMSS(predPace)}/км</div>
+      </div>
+      ${bestActual?`<div style="text-align:right"><div style="font-size:11px;color:var(--green)">✅ Факт: ${secsToHMS(bestActual.secs)}</div></div>`:''}
+      ${isBase?`<div style="font-size:10px;color:var(--accent)">БАЗА</div>`:''}
+    </div>`;
+  });
+
+  html += `</div><div style="font-size:11px;color:var(--text2);margin-top:8px;line-height:1.5">
+    Прогноз по формуле Риджела. Точнее при базе близкой к целевой дистанции.
+  </div>`;
+
+  el.innerHTML = html;
+}
+
+// ── BLOCK 6: CALORIES ─────────────────────────────────────────
+function estimateKcal(w) {
+  // If workout has kcal — use it
+  if(w.kcal && w.kcal>0) return w.kcal;
+  // Otherwise estimate by sport, duration, weight
+  const weight = (state.profile||{}).weight || 75;
+  const mins = parseInt(w.duration)||0;
+  if(!mins) return 0;
+  const rpe = w.rpe||6;
+  // MET estimation by sport and intensity
+  const baseMET = {
+    gym:3.5, run:8, swim:6, walk:3.5, bike:7,
+    box:7, bjj:6, mma:7, yoga:2.5, stretch:2, hiit:8, other:4
+  }[w.sport||'gym']||4;
+  const met = baseMET * (0.7 + rpe*0.06); // adjust by RPE
+  return Math.round(met * weight * mins / 60);
+}
+
+function renderCalories() {
+  const el = document.getElementById('calories-content');
+  if(!el) return;
+  const ws = state.workouts||[];
+  if(!ws.length) { el.innerHTML='<div style="color:var(--text2);font-size:13px">Нет тренировок</div>'; return; }
+
+  function mondayOf(n) {
+    const d=new Date(); d.setHours(0,0,0,0);
+    const dow=d.getDay()||7; d.setDate(d.getDate()-dow+1-n*7);
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  }
+
+  let filtered;
+  let periodLabel;
+  if(calPeriod==='week') {
+    const start=mondayOf(0), end=mondayOf(-1);
+    filtered=ws.filter(w=>w.date>=start&&w.date<end);
+    periodLabel='эта неделя';
+  } else if(calPeriod==='month') {
+    const ym=new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0');
+    filtered=ws.filter(w=>(w.date||'').startsWith(ym));
+    periodLabel='этот месяц';
+  } else {
+    filtered=ws;
+    periodLabel='всё время';
+  }
+
+  const totalKcal = filtered.reduce((s,w)=>s+estimateKcal(w),0);
+  const fromGarmin = filtered.filter(w=>w.kcal>0).length;
+  const estimated = filtered.length - fromGarmin;
+
+  // By sport breakdown
+  const bySport = {};
+  filtered.forEach(w=>{
+    const s=w.sport||'gym';
+    bySport[s]=(bySport[s]||0)+estimateKcal(w);
+  });
+  const sportEntries=Object.entries(bySport).sort((a,b)=>b[1]-a[1]);
+  const sportIcons={gym:'🏋️',run:'🏃',swim:'🏊',walk:'🚶',bike:'🚴',box:'🥊',bjj:'🥋',mma:'🤼',yoga:'🧘',stretch:'🤸',hiit:'💥',other:'⚡'};
+
+  // Equivalents
+  const pizza = Math.round(totalKcal/285);
+  const bigmac = Math.round(totalKcal/550);
+
+  el.innerHTML = `
+    <div style="text-align:center;margin-bottom:16px">
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:48px;color:var(--accent);line-height:1">${totalKcal.toLocaleString()}</div>
+      <div style="font-size:13px;color:var(--text2)">ккал сожжено за ${periodLabel}</div>
+      ${fromGarmin>0?`<div style="font-size:11px;color:var(--text2);margin-top:4px">${fromGarmin} из Garmin · ${estimated} расчётных</div>`:''}
+    </div>
+
+    ${sportEntries.length>1?`
+    <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:14px">
+      ${sportEntries.map(([sport,kcal])=>{
+        const pct=Math.round(kcal/totalKcal*100);
+        return `<div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:2px">
+            <span style="font-size:12px">${sportIcons[sport]||'⚡'} ${sport}</span>
+            <span style="font-size:12px;color:var(--text2)">${Math.round(kcal)} ккал</span>
+          </div>
+          <div style="height:5px;background:var(--bg3);border-radius:3px">
+            <div style="height:100%;border-radius:3px;background:var(--accent);width:${pct}%"></div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`:''}
+
+    ${totalKcal>0?`<div style="background:var(--bg3);border-radius:8px;padding:10px;font-size:13px;color:var(--text2);line-height:1.8">
+      🍕 ${pizza} кусков пиццы &nbsp;·&nbsp; 🍔 ${bigmac} BigMac
+    </div>`:''}`;
+}
+
+function renderBlock6() {
+  try { renderComparePeriods(); } catch(e) {}
+  try { renderRacePredictor(); } catch(e) {}
+  try { renderCalories(); } catch(e) {}
+}
+
 function renderAchieve() {
   try { renderPersonalRecords(); } catch(e) {}
   try { renderBadges(); } catch(e) {}
@@ -4384,6 +4898,87 @@ function setRunRPE(btn,val) {
 function setRunFeeling(btn,val) {
   document.querySelectorAll('#run-feeling-grid .feeling-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active'); state.runFeeling=val;
+}
+
+// ── GARMIN SCREENSHOT IMPORT ───────────────────────────────────
+function importGarminImage(input) {
+  const files = Array.from(input.files);
+  if(!files.length) return;
+
+  const previews = document.getElementById('garmin-img-previews');
+  const status = document.getElementById('garmin-img-status');
+  previews.innerHTML = '';
+
+  // Show previews
+  files.forEach(file=>{
+    const img = document.createElement('img');
+    img.style.cssText = 'width:calc(50% - 3px);border-radius:8px;border:1px solid var(--border);object-fit:contain;max-height:160px;background:var(--bg3)';
+    const fr = new FileReader();
+    fr.onload = e => img.src = e.target.result;
+    fr.readAsDataURL(file);
+    previews.appendChild(img);
+  });
+
+  status.style.display = 'block';
+  status.style.background = 'rgba(71,200,255,.1)';
+  status.style.border = '1px solid rgba(71,200,255,.3)';
+  status.style.color = 'var(--accent3)';
+  status.innerHTML = `✅ ${files.length} скрин(а) выбрано. Используй ручной ввод или вставь JSON ниже.<br>
+    <span style="color:var(--text2);font-size:12px">Для автоматического распознавания — отправь эти скрины в Claude и попроси:<br>
+    <i>"Извлеки данные пробежки из Garmin в JSON: dist, time, hr, hrMax, cadence, elev, kcal, date"</i><br>
+    Вставь ответ Claude в поле ниже.</span>`;
+
+  input.value = '';
+}
+
+function applyGarminJSON() {
+  const el = document.getElementById('garmin-json-paste');
+  if(!el || !el.value.trim()) { showToast('⚠️ Вставь JSON'); return; }
+  const status = document.getElementById('garmin-img-status');
+
+  try {
+    const text = el.value.trim().replace(/```json|```/g,'').trim();
+    const d = JSON.parse(text);
+
+    const fill = (id, val) => { if(val!=null) { const e=document.getElementById(id); if(e) e.value=val; } };
+    fill('run-dist',    d.dist);
+    fill('run-time',    d.time);
+    fill('run-hr',      d.hr);
+    fill('run-hr-max',  d.hrMax || d.hr_max || d.maxHr);
+    fill('run-cadence', d.cadence);
+    fill('run-elev',    d.elev || d.elevation || d.ascent);
+    fill('run-kcal',    d.kcal || d.calories);
+    fill('run-shoes',   d.shoes);
+    fill('run-notes',   d.notes);
+    fill('w-date',      d.date);
+    if(d.runType || d.type) {
+      const sel = document.getElementById('run-type');
+      if(sel) sel.value = d.runType || d.type;
+    }
+
+    calcRunPace();
+    el.value = '';
+
+    const parts = [];
+    if(d.dist)    parts.push('📏 '+d.dist+' км');
+    if(d.time)    parts.push('⏱ '+d.time);
+    if(d.hr)      parts.push('❤️ '+d.hr+' уд/мин');
+    if(d.kcal||d.calories) parts.push('🔥 '+(d.kcal||d.calories)+' ккал');
+    if(d.cadence) parts.push('👟 '+d.cadence+' шаг/мин');
+
+    status.style.display = 'block';
+    status.style.background = 'rgba(34,197,94,.1)';
+    status.style.border = '1px solid rgba(34,197,94,.3)';
+    status.style.color = 'var(--green)';
+    status.innerHTML = '✅ Данные загружены! ' + parts.join(' · ');
+    showToast('✅ Данные Garmin применены!');
+  } catch(e) {
+    status.style.display = 'block';
+    status.style.background = 'rgba(239,68,68,.1)';
+    status.style.border = '1px solid rgba(239,68,68,.3)';
+    status.style.color = 'var(--red)';
+    status.innerHTML = '⚠️ Неверный JSON. Проверь формат.';
+  }
 }
 
 function saveRunWorkout() {
